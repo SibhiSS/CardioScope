@@ -1,72 +1,118 @@
+import os
 import librosa
 import numpy as np
-import matplotlib.pyplot as plt
-import sounddevice as sd
-from scipy.signal import butter, filtfilt,hilbert,find_peaks
+import pandas as pd
+
+from scipy.signal import butter, filtfilt
 from scipy.fft import fft, fftfreq
 
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
-signal, sr = librosa.load("data/a0001.wav", sr=None)
-lowcut = 20
-highcut = 400
-order = 4
+base_folder = "training"
 
-print("Sampling Rate:", sr)
-print("Total Samples:", len(signal))
+def extract_features(file_path):
+    signal, sr = librosa.load(file_path, sr=None)
 
-max_value = np.max(np.abs(signal))
-print("Maximum amplitude:", max_value)
-normalized_signal = signal / max_value
-print("Normalized max amplitude:", np.max(np.abs(normalized_signal)))
+    signal = signal / np.max(np.abs(signal))
 
-time = np.arange(len(signal)) / sr
+    lowcut = 20
+    highcut = 400
+    order = 4
 
-nyquist = 0.5 * sr
-low = lowcut / nyquist
-high = highcut / nyquist
-b, a = butter(order, [low, high], btype='band')
-filtered_signal = filtfilt(b, a, normalized_signal)
-analytic_signal = hilbert(filtered_signal)
-envelope = np.abs(analytic_signal)
-N = len(filtered_signal)
-fft_values = fft(filtered_signal)
-freq = fftfreq(N, 1/sr)
-positive_freq = freq[:N//2]
-magnitude = np.abs(fft_values[:N//2])
-#detecting murmur bands
-normal_band = (positive_freq >= 20) & (positive_freq <= 150)
-murmur_band = (positive_freq >= 200) & (positive_freq <= 500)
-normal_energy = np.sum(magnitude[normal_band]**2)
-murmur_energy = np.sum(magnitude[murmur_band]**2)
+    nyquist = 0.5 * sr
+    low = lowcut / nyquist
+    high = highcut / nyquist
 
-print("Normal band energy:", normal_energy)
-print("Murmur band energy:", murmur_energy)
-if murmur_energy > normal_energy * 0.3:
-    print("Prediction: Possible Abnormal Heart Sound (Murmur)")
-else:
-    print("Prediction: Likely Normal Heart Sound")
+    b, a = butter(order, [low, high], btype='band')
+    filtered = filtfilt(b, a, signal)
 
+    N = len(filtered)
 
-#Detect Peaks
-peaks, _ = find_peaks(envelope, distance=sr*0.5)
+    fft_values = fft(filtered)
+    freq = fftfreq(N, 1/sr)
 
+    positive_freq = freq[:N//2]
+    magnitude = np.abs(fft_values[:N//2])
 
-plt.figure(figsize=(12,4))
-plt.plot(time, envelope)
-plt.plot(time[peaks], envelope[peaks], "ro")
-plt.title("Detected Heartbeat Peaks")
-plt.xlabel("Time (seconds)")
-plt.ylabel("Amplitude")
-plt.grid(True)
-plt.show()
+    normal_band = (positive_freq >= 20) & (positive_freq <= 150)
+    murmur_band = (positive_freq >= 200) & (positive_freq <= 500)
 
-#estimating the heart rate
-peak_times = time[peaks]
+    normal_energy = np.sum(magnitude[normal_band]**2)
+    murmur_energy = np.sum(magnitude[murmur_band]**2)
 
-intervals = np.diff(peak_times)
+    spectral_centroid = np.sum(positive_freq * magnitude) / (np.sum(magnitude) + 1e-8)
 
-average_interval = np.mean(intervals)
+    mfcc = librosa.feature.mfcc(y=filtered, sr=sr, n_mfcc=13)
+    mfcc_mean = np.mean(mfcc, axis=1)
 
-heart_rate = 60 / average_interval
+    mean_amp = np.mean(filtered)
+    std_amp = np.std(filtered)
 
-print("Estimated Heart Rate:", heart_rate, "BPM")
+    features = np.hstack([
+        mean_amp,
+        std_amp,
+        spectral_centroid,
+        normal_energy,
+        murmur_energy,
+        mfcc_mean
+    ])
+
+    return features
+
+X = []
+y = []
+
+for folder in os.listdir(base_folder):
+
+    folder_path = os.path.join(base_folder, folder)
+
+    if os.path.isdir(folder_path):
+
+        ref_path = os.path.join(folder_path, "REFERENCE.csv")
+
+        if os.path.exists(ref_path):
+
+            df = pd.read_csv(ref_path, header=None)
+
+            for index, row in df.iterrows():
+
+                file_name = row[0]+ ".wav"
+                label = row[1]
+
+                wav_path = os.path.join(folder_path, file_name)
+
+                if os.path.exists(wav_path):
+
+                    features = extract_features(wav_path)
+
+                    X.append(features)
+                    y.append(label)
+
+X = np.array(X)
+
+scaler = StandardScaler()
+X = scaler.fit_transform(X)
+
+X_train, X_test, y_train, y_test = train_test_split(
+X, y, test_size=0.2, random_state=42
+)
+
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+
+model.fit(X_train, y_train)
+
+predictions = model.predict(X_test)
+
+accuracy = accuracy_score(y_test, predictions)
+
+print("\nTest Accuracy:", accuracy)
+
+print("\nClassification Report:\n")
+print(classification_report(y_test, predictions))
+
+print("\nConfusion Matrix:\n")
+print(confusion_matrix(y_test, predictions))
+print("Total samples loaded:", len(X))
