@@ -59,8 +59,3 @@ conda install numpy pandas librosa scipy scikit-learn matplotlib seaborn joblib
 - The `data/` folder contains categorized data for model input.
 - The `training/` folder contains multiple sets of `.hea` files for model training.
 
-## License
-(Add license information here if applicable)
-
-## Author
-(Add author/contact information here)
