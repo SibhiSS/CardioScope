@@ -2,6 +2,9 @@ import os
 import librosa
 import numpy as np
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import joblib
 
 from scipy.signal import butter, filtfilt
 from scipy.fft import fft, fftfreq
@@ -110,9 +113,24 @@ accuracy = accuracy_score(y_test, predictions)
 
 print("\nTest Accuracy:", accuracy)
 
-print("\nClassification Report:\n")
-print(classification_report(y_test, predictions))
+cm = confusion_matrix(y_test, predictions)
 
-print("\nConfusion Matrix:\n")
-print(confusion_matrix(y_test, predictions))
-print("Total samples loaded:", len(X))
+print("\nConfusion Matrix:\n", cm)
+
+plt.figure(figsize=(6,5))
+
+sns.heatmap(
+cm,
+annot=True,
+fmt="d",
+cmap="Blues",
+xticklabels=["Normal","Abnormal"],
+yticklabels=["Normal","Abnormal"]
+)
+
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.title("Heart Sound Classification Confusion Matrix")
+
+plt.show()
+joblib.dump(model, "cardioscope_model.pkl")
