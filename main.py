@@ -2,7 +2,7 @@ import librosa
 import numpy as np
 import matplotlib.pyplot as plt
 import sounddevice as sd
-from scipy.signal import butter, filtfilt,hilbert
+from scipy.signal import butter, filtfilt,hilbert,find_peaks
 from scipy.fft import fft, fftfreq
 
 
@@ -34,11 +34,26 @@ freq = fftfreq(N, 1/sr)
 positive_freq = freq[:N//2]
 magnitude = np.abs(fft_values[:N//2])
 
+#Detect Peaks
+peaks, _ = find_peaks(envelope, distance=sr*0.5)
+
+
 plt.figure(figsize=(12,4))
-plt.plot(positive_freq, magnitude)
-plt.title("Frequency Spectrum of Heart Sound")
-plt.xlabel("Frequency (Hz)")
-plt.ylabel("Magnitude")
-plt.xlim(0,600)
+plt.plot(time, envelope)
+plt.plot(time[peaks], envelope[peaks], "ro")
+plt.title("Detected Heartbeat Peaks")
+plt.xlabel("Time (seconds)")
+plt.ylabel("Amplitude")
 plt.grid(True)
 plt.show()
+
+#estimating the heart rate
+peak_times = time[peaks]
+
+intervals = np.diff(peak_times)
+
+average_interval = np.mean(intervals)
+
+heart_rate = 60 / average_interval
+
+print("Estimated Heart Rate:", heart_rate, "BPM")
