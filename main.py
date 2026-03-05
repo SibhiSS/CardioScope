@@ -33,6 +33,19 @@ fft_values = fft(filtered_signal)
 freq = fftfreq(N, 1/sr)
 positive_freq = freq[:N//2]
 magnitude = np.abs(fft_values[:N//2])
+#detecting murmur bands
+normal_band = (positive_freq >= 20) & (positive_freq <= 150)
+murmur_band = (positive_freq >= 200) & (positive_freq <= 500)
+normal_energy = np.sum(magnitude[normal_band]**2)
+murmur_energy = np.sum(magnitude[murmur_band]**2)
+
+print("Normal band energy:", normal_energy)
+print("Murmur band energy:", murmur_energy)
+if murmur_energy > normal_energy * 0.3:
+    print("Prediction: Possible Abnormal Heart Sound (Murmur)")
+else:
+    print("Prediction: Likely Normal Heart Sound")
+
 
 #Detect Peaks
 peaks, _ = find_peaks(envelope, distance=sr*0.5)
